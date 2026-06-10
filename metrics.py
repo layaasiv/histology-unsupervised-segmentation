@@ -1,66 +1,58 @@
 #!/usr/bin/env python
 
 import torch
-import numpy as np
 
-def get_pred_distribution(masked_preds, num_classes):
+def calc_conf_mtx(truth, preds, num_classes):
     """
-    Calculates distribution of class predictions.
-    
-    Input: 
-        masked_preds : 1D torch.Tensor[int] - 1d tensor of predicted classes at positions where the truth label is the class of interest.
-        num_classes : int - number of classes that can be possibly predicted.
-    Output:
-        dict[int:int]: distribution of predictions for the positions of interest, keys are classes, values are counts.
-    """
-    res = {k:0 for k in range(num_classes)}
-    for i in masked_preds:
-        res[i.item()] += 1
-    return res
+    Generate the confusion matrix for 1 image
 
-def calc_conf_mtx(actual_pos, pred_pos, actual_neg, pred_neg):
-    """
-    Calculate True Positive, True Negative, False Positive and False Negative.
-    
     Input:
-        t_truth : torch.Tensor[int] - Truth labels 
-        t_preds : torch.Tensor[int] - Predicted labels
-        label : int - class of interest
-        
+        truth: torch.Tensor[int] - Matrix of predicted classes for each pixel.
+        preds: torch.Tensor[int] - Matrix of true classes for each pixel.
+        num_classes: int - Number of classes present in the image of interest.
     Output:
-        int - True Positive
-        int - True Negative
-        int - False Positive
-        int - False Negative
+        torch.Tensor[int] (num_classes x num_classes) - Confusion matrix (rows = True label, column = Predicted label).
     """
-    actual_positive = (t_truth == label)
-    pred_positive = (t_preds == label)
+    truth = truth.flatten().long()
+    preds = preds.flatten().long()
 
-    tp = (actual_positive & pred_positive).sum().item()
-    fn = (actual_positive & ~pred_positive).sum().item()
-    fp = (~actual_positive & pred_positive).sum().item()
-    tn = (~actual_positive & ~pred_positive).sum().item()
+    idx = truth * num_classes + preds # unique codes each (pred, truth) pair of labels
 
-    return tp, tn, fp, fn
+    conf = torch.bincount(
+        idx, minlength=num_classes * num_classes
+    ).reshape(num_classes, num_classes)
 
-def calc_metrics(tp, tn, fp, fn):
+    return conf
+
+def truefalse_posneg(conf):
     """
-    Calculate precision, recall, F1 score and accuracy.
-    
+    Calculates true/false positives/negatives. 
+
     Input:
-        tp: int - True positive
-        tn: int - True negative
-        fp: int - False positive
-        fn: int - False negative
+        conf: torch.Tensor[int] (num_classes x num_classes) - Confusion matrix.
     Output:
-        float - precision
-        float - recall
-        float - F1 score
-        float - accuracy
+        torch.Tensor[int] (num_classes) x 4 - True/false positive/negative counts.
     """
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
-    f1_score = (2 * precision * recall) / (precision + recall)
-    accuracy = (tp + tn) / (tp + tn + fp + fn)
-    
-    return precision, recall, f1_score, accuracy
+    tp = conf.diag()
+    fn = conf.sum(dim=1) - tp
+    fp = conf.sum(dim=0) - tp
+    tn = conf.sum() - tp - fp - fn
+    return tp, fp, tn, fn
+
+def cls_stats(conf):
+    """
+    Calculates classification statistics: precision, recall, F1 score, and accuracy.
+
+    Input:
+        conf: torch.Tensor[int] (num_classes x num_classes) - Confusion matrix.
+    Output:
+        torch.Tensor[float] (num_classes) x 4 - Precision, recall, F1 score, accuracy
+    """
+    tp, fp, tn, fn = truefalse_posneg(conf)
+
+    precision = tp.float() / (tp+fp).clamp(min=1)
+    recall = tp.float() / (tp+fn).clamp(min=1)
+    f1 = (2 * precision * recall) / (precision + recall).clamp(min=1e-8)
+    accuracy = (tp + tn).float() / (tp + tn + fp + fn)
+
+    return precision, recall, f1, accuracy

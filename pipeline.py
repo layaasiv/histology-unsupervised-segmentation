@@ -34,29 +34,23 @@ def generate_stats(pred_path, truth_path, out_path):
         # Initialize the output directory
         out_path.mkdir(parents=True, exist_ok=True)
 
-        # Initialize list to hold the rows of the result df
-        rows = []
+        conf = calc_conf_mtx(t_truth, t_preds, label)
+        tp, fp, tn, fn = truefalse_posneg(conf)
+        precision, recall, f1_score, accuracy = cls_stats(conf)
 
-        for label in range(num_classes):
-            pred_dist = get_pred_distribution(preds_label, num_classes)
-            tp, tn, fp, fn = calc_conf_mtx(t_truth, t_preds, label)
-            precision, recall, f1_score, accuracy = calc_metrics(tp, tn, fp, fn)
-
-            stats_dict = {
-                "tp": tp,
-                "tn": tn,
-                "fp": fp,
-                "fn": fn,
-                "precision": precision,
-                "recall": recall,
-                "f1_score": f1_score,
-                "accuracy": accuracy
-            }
-
-            stats_dict.update(pred_dist)
-            rows.append(stats_dict)
-
-        result = pd.DataFrame(rows)
+        stats_dict = {
+            "tp": tp,
+            "tn": tn,
+            "fp": fp,
+            "fn": fn,
+            "precision": precision,
+            "recall": recall,
+            "f1_score": f1_score,
+            "accuracy": accuracy,
+            "conf_matrix": conf
+        }
+        
+        result = pd.DataFrame(stats_dict)
         result.to_csv(out_path/f"{file.stem}_metrics.csv")
 
 
