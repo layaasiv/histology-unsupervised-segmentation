@@ -1,0 +1,15 @@
+name: hist-unsupervised-seg
+channels:
+  - conda-forge
+  - pytorch
+
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - pillow
+  - matplotlib
+  - scikit-image
+  - pytorch
+  - pip:
+      - git+https://github.com/Borda/pyImSegm.git
